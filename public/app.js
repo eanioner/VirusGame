@@ -37,19 +37,23 @@ jQuery(function($){
 		gamming : function(data){
 			App.updateFiled(data.ind_i, data.ind_j, data.val);
 
-			if(data.nTurns == 3){
-				App.changePlayer();
-			}
+
 
 			// есть ли ход
 			if(App.existTurn()){
 				console.log("Turn exists");
+
+				if(data.nTurns == 3){
+					App.changePlayer();
+				}
 				App.showGameScreen();
 			}else{
 				console.log("Turn doesn't exist");
+				App.nTurns = -1;
 				IO.socket.emit('gameOver', data);
 				//return;
 			}
+
 
 
 		},
@@ -233,7 +237,7 @@ jQuery(function($){
 		result: function(){
 			App.$gameArea.html(App.$overScreen);
 
-			if(App.turn){
+			if(App.nTurns == -1){
 				$('#gameover').text("You failed");
 			}else{
 				$('#gameover').text("You won");
