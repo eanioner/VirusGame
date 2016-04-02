@@ -14,7 +14,12 @@ jQuery(function($){
 			IO.socket.on('newGameCreated', IO.onNewGameCreated);
 			IO.socket.on('beginGame', IO.beginGame);
 			IO.socket.on('gamming', IO.gamming);
+			IO.socket.on('gameOver', IO.over);
+			IO.socket.on('newGame', IO.newGame);
+		},
 
+		newGame : function(){
+			App.newInit();
 		},
 
 		onConnected : function(){
@@ -36,7 +41,21 @@ jQuery(function($){
 				App.changePlayer();
 			}
 
-			App.showGameScreen();
+			// есть ли ход
+			if(App.existTurn()){
+				console.log("Turn exists");
+				App.showGameScreen();
+			}else{
+				console.log("Turn doesn't exist");
+				IO.socket.emit('gameOver', data);
+				//return;
+			}
+
+
+		},
+
+		over: function(){
+				App.result();
 		},
 
 	};
@@ -58,6 +77,10 @@ jQuery(function($){
 
 		field: '',
 
+		marked: "",
+
+
+
 		init: function() {
 			App.cacheElements();
 			App.showInitScreen();
@@ -69,8 +92,10 @@ jQuery(function($){
 			App.h = 10;
 
 			App.field = new Array(App.h);
+			App.marked = new Array(App.h);
 			for (var i=0;i<App.h;i++) {
     			App.field[i]=new Array(App.w);
+					App.marked[i] = new Array(App.w);
     			for (var j=0;j<App.w;j++) {
         			App.field[i][j]=0;
     			}
@@ -83,6 +108,31 @@ jQuery(function($){
 			//FastClick.attach(document.body);
 		},
 
+		newInit : function(){
+			App.w = 10;
+			App.h = 10;
+
+			App.field = new Array(App.h);
+			App.marked = new Array(App.h);
+			for (var i=0;i<App.h;i++) {
+					App.field[i]=new Array(App.w);
+					App.marked[i] = new Array(App.w);
+					for (var j=0;j<App.w;j++) {
+							App.field[i][j]=0;
+					}
+			}
+			App.field[0][0] = 1;
+			App.field[App.h-1][App.w-1] = 3;
+
+			if(App.myRole == "Host")
+				App.turn = true;
+			else
+				App.turn = false;
+
+			App.nTurns = 1;
+
+		},
+
 		cacheElements: function(){
 			App.$doc = $(document);
 
@@ -91,17 +141,24 @@ jQuery(function($){
 			App.$joinScreen = $('#join-game-template').html();
 			App.$createScreen = $('#create-game-template').html();
 			App.$gameScreen = $('#game-template').html();
+			App.$overScreen = $('#game-over-screen-template').html();
 		},
 
 		bindEvents: function() {
 			App.$doc.on('click', '#btnCreateGame', App.Host.onCreateClick);
 			App.$doc.on('click', '#btnJoinGame', App.Player.onJoinClick);
 			App.$doc.on('click', '#btnStart', App.Player.onPlayerStartClick);
+			App.$doc.on('click', '#btnNewGame', App.onNewGame);
 			App.$doc.on('click', '.cell', App.onClickTurn);
 
 			//App.$doc.on('click', '#btnPlayerNextTurn', App.Player.onNextTurnClick);
 			//App.$doc.on('click', '#btnHostNextTurn', App.Host.onNextTurnClick);
 		},
+
+		onNewGame: function(){
+			IO.socket.emit('newGame', {gameId : App.gameId});
+		},
+
 
 		showInitScreen: function() {
 			App.$gameArea.html(App.$introScreen);
@@ -118,6 +175,70 @@ jQuery(function($){
 				App.nTurns = 1;
 			else
 			  App.nTurns = 0;
+		},
+
+		existTurn: function() {
+			var good = 1;
+			var good_wall = 2;
+			var bad = 3;
+			var bad_wall = 4;
+
+			if(App.myRole != 'Host'){
+				good = 3;
+				good_wall = 4;
+				bad = 1;
+				bad_wall = 2;
+			}
+
+
+			for(var m = 0; m < App.h; m++){
+				for(var n = 0; n < App.w; n++){
+					App.marked[m][n] = false;
+				}
+			}
+
+			for(var i = 0; i < App.h; i++){
+				for(var j = 0; j < App.w; j++){
+					if(App.checkExistTurn(i,j,good,good_wall,bad, bad_wall)){
+						return true;
+					}
+				}
+			}
+			return false;
+
+		},
+
+
+		checkExistTurn: function(i,j,good,good_wall,bad, bad_wall){
+			if(i < 0 || i >= App.h || j < 0 || j >= App.w)
+				return false;
+
+			if(App.field[i][j] == good_wall || App.field[i][j] == bad_wall || App.field[i][j] == good)
+				return false;
+
+
+			for(var a = i - 1; a <= i + 1; a++){
+				for(var b = j - 1; b <= j + 1; b++){
+					if(a == i && b == j)
+						continue;
+					if(App.checkAlive(a,b, good, good_wall))
+						return true;
+				}
+			}
+
+			return false;
+
+		},
+
+		result: function(){
+			App.$gameArea.html(App.$overScreen);
+
+			if(App.turn){
+				$('#gameover').text("You failed");
+			}else{
+				$('#gameover').text("You won");
+			}
+
 		},
 
 		showGameScreen: function() {
@@ -174,12 +295,15 @@ jQuery(function($){
 
 			var head = "";//"<div> <div id='leftname' class='namePl'> Player1 </div> <div id='right=name' class='namePr'>Player2</div> </div>"
 
-			App.$gameArea.html(head + "<table id='board'>" + str + "</table>" + turn);
+			App.$gameArea.html(head + "<div class='field'> <table id='board'>" + str + "</table></div>" + turn );
 
 		},
 
 
+
+
 		onClickTurn: function() {
+
 
 			if(App.turn){
 				console.log("Good turn");
@@ -192,6 +316,7 @@ jQuery(function($){
 					App.Host.onClickTurnHost(i,j);
 				else
 					App.Player.onClickTurnPlayer(i,j);
+
 
 			}else{
 				console.log("You cannot turn");
@@ -223,22 +348,22 @@ jQuery(function($){
 				$('#spanNewGameCode').text(App.gameId);
 			},
 
-			marked: "",
+
 
 			onClickTurnHost: function(i,j) {
 				// 0 - empty, 1 - red_dot, 2 - red_wall, 3 - blue_dot, 4 - blue_wall
 				console.log("Turn Host");
 				if(App.field[i][j] == 2 || App.field[i][j] == 4 || App.field[i][j] == 1){
-					console.log("Here is wall of your dot");
+					//console.log("Here is wall of your dot");
 					return;
 				} else {
 					// Ставить можно. Проверить есть ли вокруг живые клетки
 
-					App.Host.marked = new Array(App.h);
+					//App.Host.marked = new Array(App.h);
 					for(var m = 0; m < App.h; m++){
-						App.Host.marked[m] = new Array(App.w);
+						//App.Host.marked[m] = new Array(App.w);
 						for(var n = 0; n < App.w; n++){
-							App.Host.marked[m][n] = false;
+							App.marked[m][n] = false;
 						}
 					}
 
@@ -251,7 +376,7 @@ jQuery(function($){
 
 							if(App.checkAlive(a,b, 1, 2)){
 
-								console.log("you can");
+								//console.log("you can");
 								App.nTurns += 1;
 								var mark = 0;
 								if(App.field[i][j] == 0)
@@ -263,12 +388,12 @@ jQuery(function($){
 
 
 
-								delete App.Host.marked;
+								//delete App.Host.marked;
 								return;
 							}
 						}
-					console.log("you cannot");
-					delete App.Host.marked;
+					//console.log("you cannot");
+					//delete App.Host.marked;
 
 				}
 		}
@@ -276,13 +401,13 @@ jQuery(function($){
 
 
 		checkAlive: function(i,j, good, good_wall){
-				console.log(i + " " + j)
+				//console.log(i + " " + j)
 				if(i < 0 || i >= App.h || j < 0 || j >= App.w)
 					return false;
 
-				if(App.Host.marked[i][j] == true)
+				if(App.marked[i][j] == true)
 					return false;
-				App.Host.marked[i][j] = true;
+				App.marked[i][j] = true;
 				if(App.field[i][j] == 0)
 					return false;
 				if(App.field[i][j] == good)
@@ -324,11 +449,11 @@ jQuery(function($){
 				} else {
 					// Ставить можно. Проверить есть ли вокруг живые клетки
 
-					App.Host.marked = new Array(App.h);
+					//App.Host.marked = new Array(App.h);
 					for(var m = 0; m < App.h; m++){
-						App.Host.marked[m] = new Array(App.w);
+						//App.Host.marked[m] = new Array(App.w);
 						for(var n = 0; n < App.w; n++){
-							App.Host.marked[m][n] = false;
+							App.marked[m][n] = false;
 						}
 					}
 
@@ -353,12 +478,12 @@ jQuery(function($){
 
 
 
-								delete App.Host.marked;
+								//delete App.Host.marked;
 								return;
 							}
 						}
 					console.log("you cannot");
-					delete App.Host.marked;
+					//delete App.Host.marked;
 
 				}
 			}

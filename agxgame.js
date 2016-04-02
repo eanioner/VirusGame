@@ -13,9 +13,18 @@ exports.initGame = function(sio, socket){
 
 	// События client'a
 	gameSocket.on('playerJoinGame', playerJoinGame);
-	//gameSocket.on('playerAnswered', playerAnswer);
+	gameSocket.on('gameOver', gameOver);
+	gameSocket.on('newGame', newGame);
 }
 
+function newGame(data){
+	io.sockets.in(data.gameId).emit('newGame');
+	io.sockets.in(data.gameId).emit('beginGame', data);
+}
+
+function gameOver(data){
+		io.sockets.in(data.gameId).emit('gameOver');
+}
 
 function hostCreateNewGame() {
 	var thisGameId = (Math.random() * 10000) | 0;
